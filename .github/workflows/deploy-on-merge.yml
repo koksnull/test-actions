@@ -1,0 +1,61 @@
+# GitHub Action для деплоя на сервер после мерджа Pull Request
+name: Deploy on PR Merge
+
+# Триггер: срабатывает когда Pull Request закрывается
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main  # Можно добавить другие ветки, например: - develop
+
+# Определяем задачи
+jobs:
+  deploy:
+    # Условие: выполняем деплой только если PR был смержен (а не просто закрыт)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    # Ограничиваем права GITHUB_TOKEN для безопасности
+    permissions:
+      contents: read
+    
+    # Стратегия для деплоя на несколько серверов параллельно
+    strategy:
+      matrix:
+        server: [server1, server2, server3]
+      fail-fast: false  # Продолжать деплой на другие серверы при ошибке
+    
+    steps:
+      # Шаг 1: Чекаут кода из ветки, в которую был смержен PR
+      - name: Checkout merged code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+      
+      # Шаг 2: Подготовка SSH ключа для подключения к серверу
+      - name: Setup SSH Key for ${{ matrix.server }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets[format('{0}_SSH_PRIVATE_KEY', matrix.server)] }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets[format('{0}_SERVER_HOST', matrix.server)] }} >> ~/.ssh/known_hosts
+      
+      # Шаг 3: Деплой кода на сервер через rsync
+      - name: Deploy to ${{ matrix.server }} via rsync
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            ./ ${{ secrets[format('{0}_SERVER_USER', matrix.server)] }}@${{ secrets[format('{0}_SERVER_HOST', matrix.server)] }}:${{ secrets[format('{0}_DEPLOY_PATH', matrix.server)] }}
+      
+      # Шаг 4: Вывод информации о деплое
+      - name: Deployment Info for ${{ matrix.server }}
+        run: |
+          echo "✅ Deployment to ${{ matrix.server }} completed successfully!"
+          echo "📦 Deployed branch: ${{ github.event.pull_request.base.ref }}"
+          echo "🔀 Merged PR: #${{ github.event.pull_request.number }}"
+          echo "👤 Author: ${{ github.event.pull_request.user.login }}"
+          echo "📝 PR Title: ${{ github.event.pull_request.title }}"
