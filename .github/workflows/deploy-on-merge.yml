@@ -30,7 +30,6 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-        if: secrets.SSH_PRIVATE_KEY != '' && secrets.SERVER_HOST != ''
       
       # Шаг 3: Деплой кода на сервер через rsync
       - name: Deploy to Server via rsync
@@ -41,7 +40,6 @@ jobs:
             --exclude '.github' \
             --exclude 'node_modules' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}
-        if: secrets.SSH_PRIVATE_KEY != '' && secrets.SERVER_HOST != ''
       
       # Альтернативный вариант: Деплой через FTP/SFTP
       # Раскомментируйте этот шаг если хотите использовать FTP
