@@ -15,6 +15,10 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     
+    # Ограничиваем права GITHUB_TOKEN для безопасности
+    permissions:
+      contents: read
+    
     steps:
       # Шаг 1: Чекаут кода из ветки, в которую был смержен PR
       - name: Checkout merged code
