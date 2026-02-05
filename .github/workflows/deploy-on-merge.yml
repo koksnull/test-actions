@@ -1,0 +1,63 @@
+# GitHub Action для деплоя на сервер после мерджа Pull Request
+name: Deploy on PR Merge
+
+# Триггер: срабатывает когда Pull Request закрывается
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main  # Можно добавить другие ветки, например: - develop
+
+# Определяем задачи
+jobs:
+  deploy:
+    # Условие: выполняем деплой только если PR был смержен (а не просто закрыт)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Шаг 1: Чекаут кода из ветки, в которую был смержен PR
+      - name: Checkout merged code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+      
+      # Шаг 2: Подготовка SSH ключа для подключения к серверу
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+        if: secrets.SSH_PRIVATE_KEY != '' && secrets.SERVER_HOST != ''
+      
+      # Шаг 3: Деплой кода на сервер через rsync
+      - name: Deploy to Server via rsync
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}
+        if: secrets.SSH_PRIVATE_KEY != '' && secrets.SERVER_HOST != ''
+      
+      # Альтернативный вариант: Деплой через FTP/SFTP
+      # Раскомментируйте этот шаг если хотите использовать FTP
+      # - name: Deploy to Server via FTP
+      #   uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      #   with:
+      #     server: ${{ secrets.FTP_SERVER }}
+      #     username: ${{ secrets.FTP_USERNAME }}
+      #     password: ${{ secrets.FTP_PASSWORD }}
+      #     server-dir: ${{ secrets.FTP_SERVER_DIR }}
+      
+      # Шаг 4: Вывод информации о деплое
+      - name: Deployment Info
+        run: |
+          echo "✅ Deployment completed successfully!"
+          echo "📦 Deployed branch: ${{ github.event.pull_request.base.ref }}"
+          echo "🔀 Merged PR: #${{ github.event.pull_request.number }}"
+          echo "👤 Author: ${{ github.event.pull_request.user.login }}"
+          echo "📝 PR Title: ${{ github.event.pull_request.title }}"
